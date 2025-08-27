@@ -38,7 +38,7 @@ export default function Home() {
 
   // Estado del template del email
   const [emailTemplate, setEmailTemplate] = useState<EmailTemplate>({
-    subject: "Soluciones Integrales en Madera para sus Proyectos",
+    subject: "Soluciones Integrales en madera para sus proyectos",
     greeting: "Hola,",
     body: "Esperamos que este mensaje te encuentre bien.\n\nTe adjuntamos un documento PDF importante que requiere tu atención inmediata.\n\nPor favor, revisa el contenido del documento y no dudes en contactarnos si tienes alguna pregunta o necesitas aclaraciones adicionales.\n\nEste documento contiene información relevante para tu trabajo y requiere tu revisión lo antes posible.",
     signature: "Saludos,",
