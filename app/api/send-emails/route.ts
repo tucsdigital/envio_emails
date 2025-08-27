@@ -64,13 +64,25 @@ const leerDestinatarios = (): string[] => {
 
 // Función para crear el contenido HTML del email
 const crearContenidoHTML = (template: any): string => {
+  // Valores por defecto si no se proporciona template
+  const defaultTemplate = {
+    subject: '📎 Documento Importante - Requiere Atención',
+    greeting: 'Hola,',
+    body: 'Esperamos que este mensaje te encuentre bien.\n\nTe adjuntamos un documento PDF importante que requiere tu atención inmediata.',
+    signature: 'Saludos cordiales,\nTu Equipo de Trabajo',
+    companyName: 'Tu Empresa'
+  };
+
+  // Usar el template proporcionado o los valores por defecto
+  const finalTemplate = template || defaultTemplate;
+  
   return `
     <!DOCTYPE html>
     <html lang="es">
     <head>
         <meta charset="UTF-8">
         <meta name="viewport" content="width=device-width, initial-scale=1.0">
-        <title>${template.subject || 'Documento Importante'}</title>
+        <title>${finalTemplate.subject}</title>
         <style>
             body {
                 font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
@@ -135,18 +147,18 @@ const crearContenidoHTML = (template: any): string => {
     <body>
         <div class="email-container">
             <div class="content">
-                <div class="greeting">${template.greeting || 'Hola,'}</div>
+                <div class="greeting">${finalTemplate.greeting}</div>
                 
-                <div class="message">${template.body || 'Esperamos que este mensaje te encuentre bien.'}</div>
+                <div class="message">${finalTemplate.body}</div>
                 
                 <div class="signature">
-                    ${template.signature || 'Saludos cordiales.'}
+                    ${finalTemplate.signature}
                 </div>
             </div>
             
             <div class="footer">
                 <p style="margin-top: 16px; font-size: 12px; color: #9ca3af;">
-                    © 2025 ${template.companyName || 'Maderas Caballero'}. Todos los derechos reservados.
+                    © 2025 ${finalTemplate.companyName}. Todos los derechos reservados.
                 </p>
             </div>
         </div>
@@ -163,19 +175,14 @@ const enviarEmail = async (
   template?: any
 ): Promise<EmailResult> => {
   try {
-    // Crear el contenido HTML personalizado
-    const htmlContent = crearContenidoHTML(template || {
-      greeting: 'Hola,',
-      body: 'Esperamos que este mensaje te encuentre bien.\n\nTe adjuntamos un documento PDF importante que requiere tu atención inmediata.',
-      signature: 'Saludosz',
-      companyName: 'Maderas Caballero'
-    });
+    // Crear el contenido HTML personalizado usando solo el template del frontend
+    const htmlContent = crearContenidoHTML(template);
     
     // Configurar las opciones del email
     const mailOptions = {
-      from: `"Maderas Caballero" <${process.env.GMAIL_USER}>`,
+      from: `"${template?.companyName || 'Tu Empresa'}" <${process.env.GMAIL_USER}>`,
       to: email,
-      subject: template?.subject || `Soluciones Integrales en Madera para sus Proyectos`,
+      subject: template?.subject || `📎 Documento Importante - Requiere Atención`,
       html: htmlContent,
       attachments: [
         {
