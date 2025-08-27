@@ -309,8 +309,6 @@ export default function Home() {
               </div>
               
               <div class="footer">
-                  <p><strong>⚠️ Importante:</strong> Este es un email automático del sistema.</p>
-                  <p>Si tienes alguna consulta, contacta directamente con nuestro equipo de soporte.</p>
                   <p style="margin-top: 16px; font-size: 12px; color: #9ca3af;">
                       © 2024 ${emailTemplate.companyName}. Todos los derechos reservados.
                   </p>
