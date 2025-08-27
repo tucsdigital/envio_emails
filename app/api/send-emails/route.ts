@@ -26,10 +26,10 @@ const createTransporter = () => {
       user: process.env.GMAIL_USER,
       pass: process.env.GMAIL_PASSWORD,
     },
-    // Configuraciones adicionales para mejor estabilidad
-    connectionTimeout: 60000, // 60 segundos
-    greetingTimeout: 30000,   // 30 segundos
-    socketTimeout: 60000,     // 60 segundos
+    // Configuraciones más agresivas para evitar timeouts
+    connectionTimeout: 15000, // 15 segundos
+    greetingTimeout: 10000,   // 10 segundos
+    socketTimeout: 15000,     // 15 segundos
   });
 };
 
@@ -222,7 +222,7 @@ const enviarEmail = async (
 };
 
 // Función principal para enviar emails a todos los destinatarios
-const enviarEmailsMasivos = async (template?: any): Promise<EmailResult[]> => {
+const enviarEmailsMasivos = async (template?: any, tandaConfig?: any): Promise<EmailResult[]> => {
   const resultados: EmailResult[] = [];
   
   try {
@@ -268,36 +268,65 @@ const enviarEmailsMasivos = async (template?: any): Promise<EmailResult[]> => {
       throw new Error(`Error de conexión SMTP: ${verifyError instanceof Error ? verifyError.message : 'Error desconocido'}`);
     }
     
-    // Enviar emails a cada destinatario
-    for (let i = 0; i < destinatarios.length; i++) {
-      const email = destinatarios[i];
-      const progreso = Math.round(((i + 1) / destinatarios.length) * 100);
+    // Configuración de tandas para evitar límites de Gmail
+    const TAMANO_TANDA = tandaConfig?.tamanoTanda || 10; // Emails por tanda
+    const PAUSA_ENTRE_TANDAS = (tandaConfig?.pausaEntreTandas || 5) * 60 * 1000; // minutos a ms
+    const PAUSA_ENTRE_EMAILS = (tandaConfig?.pausaEntreEmails || 2) * 1000; // segundos a ms
+    
+    const totalTandas = Math.ceil(destinatarios.length / TAMANO_TANDA);
+    console.log(`📊 Configuración de tandas: ${TAMANO_TANDA} emails por tanda, ${totalTandas} tandas totales`);
+    
+    // Enviar emails por tandas
+    for (let tanda = 0; tanda < totalTandas; tanda++) {
+      const inicioTanda = tanda * TAMANO_TANDA;
+      const finTanda = Math.min(inicioTanda + TAMANO_TANDA, destinatarios.length);
+      const emailsEnTanda = finTanda - inicioTanda;
       
-      console.log(`📤 [${progreso}%] Enviando email ${i + 1}/${destinatarios.length} a: ${email}`);
+      console.log(`\n📦 === TANDA ${tanda + 1}/${totalTandas} ===`);
+      console.log(`📤 Enviando emails ${inicioTanda + 1} a ${finTanda} (${emailsEnTanda} emails)`);
       
-      try {
-        const resultado = await enviarEmail(transporter, email, pdfPath, template);
-        resultados.push(resultado);
+      // Enviar emails de esta tanda
+      for (let i = inicioTanda; i < finTanda; i++) {
+        const email = destinatarios[i];
+        const progreso = Math.round(((i + 1) / destinatarios.length) * 100);
+        const progresoTanda = Math.round(((i - inicioTanda + 1) / emailsEnTanda) * 100);
         
-        if (resultado.success) {
-          console.log(`✅ Email enviado exitosamente a: ${email}`);
-        } else {
-          console.error(`❌ Error enviando email a ${email}:`, resultado.error);
+        console.log(`📤 [${progreso}%] Tanda ${tanda + 1}: ${progresoTanda}% - Email ${i + 1}/${destinatarios.length} a: ${email}`);
+        
+        try {
+          const resultado = await enviarEmail(transporter, email, pdfPath, template);
+          resultados.push(resultado);
+          
+          if (resultado.success) {
+            console.log(`✅ Email enviado exitosamente a: ${email}`);
+          } else {
+            console.error(`❌ Error enviando email a ${email}:`, resultado.error);
+          }
+        } catch (emailError) {
+          console.error(`💥 Error crítico enviando email a ${email}:`, emailError);
+          resultados.push({
+            email,
+            success: false,
+            error: emailError instanceof Error ? emailError.message : 'Error desconocido'
+          });
         }
-      } catch (emailError) {
-        console.error(`💥 Error crítico enviando email a ${email}:`, emailError);
-        resultados.push({
-          email,
-          success: false,
-          error: emailError instanceof Error ? emailError.message : 'Error desconocido'
-        });
+        
+        // Pausa entre emails de la misma tanda
+        if (i < finTanda - 1) {
+          console.log(`⏳ Esperando ${PAUSA_ENTRE_EMAILS/1000}s antes del siguiente email...`);
+          await new Promise(resolve => setTimeout(resolve, PAUSA_ENTRE_EMAILS));
+        }
       }
       
-      // Pausa entre envíos para evitar límites de rate y spam
-      if (i < destinatarios.length - 1) {
-        const delay = Math.random() * 1000 + 1000; // Entre 1-2 segundos
-        console.log(`⏳ Esperando ${Math.round(delay)}ms antes del siguiente envío...`);
-        await new Promise(resolve => setTimeout(resolve, delay));
+      // Pausa entre tandas (excepto en la última)
+      if (tanda < totalTandas - 1) {
+        console.log(`\n⏸️ === PAUSA ENTRE TANDAS ===`);
+        console.log(`⏳ Esperando ${PAUSA_ENTRE_TANDAS/60000} minutos antes de la siguiente tanda...`);
+        console.log(`📊 Progreso general: ${Math.round((finTanda / destinatarios.length) * 100)}% completado`);
+        
+        await new Promise(resolve => setTimeout(resolve, PAUSA_ENTRE_TANDAS));
+        
+        console.log(`🚀 Continuando con la siguiente tanda...`);
       }
     }
     
@@ -314,6 +343,10 @@ const enviarEmailsMasivos = async (template?: any): Promise<EmailResult[]> => {
 
 // Handler POST para la API route
 export async function POST(request: NextRequest) {
+  // Crear un AbortController para manejar timeouts
+  const controller = new AbortController();
+  const timeoutId = setTimeout(() => controller.abort(), 240000); // 4 minutos
+
   try {
     console.log('🚀 Iniciando proceso de envío de emails masivos...');
     console.log('🔍 Variables de entorno:');
@@ -322,12 +355,15 @@ export async function POST(request: NextRequest) {
     console.log('  - SMTP_HOST:', process.env.SMTP_HOST || 'smtp.gmail.com (default)');
     console.log('  - SMTP_PORT:', process.env.SMTP_PORT || '587 (default)');
     
-    // Obtener el template del body de la request
+    // Obtener el template y configuración de tandas del body de la request
     let template = null;
+    let tandaConfig = null;
     try {
       const body = await request.json();
       template = body.template;
+      tandaConfig = body.tandaConfig;
       console.log('📝 Template recibido:', template ? 'SÍ' : 'NO (usando valores por defecto)');
+      console.log('⚙️ Configuración de tandas:', tandaConfig ? 'SÍ' : 'NO (usando valores por defecto)');
     } catch (error) {
       console.log('⚠️ No se pudo parsear el body de la request, usando valores por defecto');
     }
@@ -349,12 +385,22 @@ export async function POST(request: NextRequest) {
     
     console.log('✅ Credenciales verificadas, procediendo con el envío...');
     
-    // Ejecutar el envío masivo con el template
-    const resultados = await enviarEmailsMasivos(template);
+    // Ejecutar el envío masivo con el template y configuración de tandas usando AbortController
+    const resultados = await Promise.race([
+      enviarEmailsMasivos(template, tandaConfig),
+      new Promise((_, reject) => {
+        controller.signal.addEventListener('abort', () => {
+          reject(new Error('Timeout: La operación tardó demasiado (4 minutos)'));
+        });
+      })
+    ]) as EmailResult[];
+    
+    // Limpiar el timeout
+    clearTimeout(timeoutId);
     
     // Calcular estadísticas
-    const exitosos = resultados.filter(r => r.success).length;
-    const fallidos = resultados.filter(r => !r.success).length;
+    const exitosos = resultados.filter((r: EmailResult) => r.success).length;
+    const fallidos = resultados.filter((r: EmailResult) => !r.success).length;
     
     console.log(`📊 Resumen final: ${exitosos} exitosos, ${fallidos} fallidos de ${resultados.length} total`);
     
@@ -373,16 +419,34 @@ export async function POST(request: NextRequest) {
     });
     
   } catch (error) {
+    // Limpiar el timeout en caso de error
+    clearTimeout(timeoutId);
+    
     const errorMessage = error instanceof Error ? error.message : 'Error desconocido';
     console.error('💥 Error en la API route:', errorMessage);
     
+    // Determinar el status code apropiado
+    let statusCode = 500;
+    let errorType = 'Error interno del servidor';
+    
+    if (errorMessage.includes('Timeout')) {
+      statusCode = 408;
+      errorType = 'Timeout: La operación tardó demasiado (4 minutos)';
+    } else if (errorMessage.includes('Credenciales')) {
+      statusCode = 401;
+      errorType = 'Error de autenticación';
+    } else if (errorMessage.includes('SMTP')) {
+      statusCode = 502;
+      errorType = 'Error de conexión SMTP';
+    }
+    
     return NextResponse.json(
       { 
-        error: 'Error interno del servidor',
+        error: errorType,
         details: errorMessage,
         timestamp: new Date().toISOString()
       },
-      { status: 500 }
+      { status: statusCode }
     );
   }
 }
@@ -452,3 +516,17 @@ export async function GET() {
     );
   }
 }
+
+// Configuración de timeout global
+export const maxDuration = 300; // 5 minutos máximo
+export const dynamic = 'force-dynamic';
+
+// Middleware para manejar errores globalmente
+process.on('unhandledRejection', (reason, promise) => {
+  console.error('❌ Unhandled Rejection at:', promise, 'reason:', reason);
+});
+
+process.on('uncaughtException', (error) => {
+  console.error('💥 Uncaught Exception:', error);
+  process.exit(1);
+});
