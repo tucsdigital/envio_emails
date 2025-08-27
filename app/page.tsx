@@ -47,7 +47,7 @@ export default function Home() {
 
   // Configuración de tandas
   const [tandaConfig, setTandaConfig] = useState({
-    tamanoTanda: 10,
+    tamanoTanda: 5,
     pausaEntreTandas: 5, // minutos
     pausaEntreEmails: 2, // segundos
   });
