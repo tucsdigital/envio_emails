@@ -167,15 +167,15 @@ const enviarEmail = async (
     const htmlContent = crearContenidoHTML(template || {
       greeting: 'Hola,',
       body: 'Esperamos que este mensaje te encuentre bien.\n\nTe adjuntamos un documento PDF importante que requiere tu atención inmediata.',
-      signature: 'Saludos cordiales,\nTu Equipo de Trabajo',
-      companyName: 'Tu Empresa'
+      signature: 'Saludosz',
+      companyName: 'Maderas Caballero'
     });
     
     // Configurar las opciones del email
     const mailOptions = {
-      from: `"Sistema de Emails" <${process.env.GMAIL_USER}>`,
+      from: `"Maderas Caballero" <${process.env.GMAIL_USER}>`,
       to: email,
-      subject: template?.subject || `Documento Importante`,
+      subject: template?.subject || `Soluciones Integrales en Madera para sus Proyectos`,
       html: htmlContent,
       attachments: [
         {
